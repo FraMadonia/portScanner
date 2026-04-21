@@ -129,7 +129,7 @@ namespace portScanner.Models
             Protocollo = Protocollo.TCP;
             try
             {
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(1500));
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
                     externalToken,
                     timeoutCts.Token

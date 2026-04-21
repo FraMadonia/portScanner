@@ -197,15 +197,25 @@ namespace portScanner
 
         private void BtnStopScan_Click(object sender, RoutedEventArgs e)
         {
-            // ✅ FIX: logica corretta — cancella se NON è già stato cancellato
             if (!Source.IsCancellationRequested)
             {
                 Source.Cancel();
+                BtnStopScan.Content = "▶ RIPRENDI";
+                BtnStartScan.Content = "▶ AVVIA NUOVA";
                 timer.Stop();
                 dispatcherTimer.Stop();
-                LblScanStatus.Text = "Scansione fermata";
-                BtnStopScan.IsEnabled = false;
+                LblScanStatus.Text = "In attesa...";
                 BtnStartScan.IsEnabled = true;
+            }
+            else
+            {
+                Source.Dispose();
+                timer.Start();
+                dispatcherTimer.Start();
+                LblScanStatus.Text = "Scansione in corso...";
+                BtnStopScan.Content = "⏹ FERMA";
+                BtnStartScan.Content = "▶ AVVIA";
+                BtnStartScan.IsEnabled = false;
             }
         }
 
