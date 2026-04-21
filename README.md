@@ -4,7 +4,6 @@
 #### Tecnologie
 - XAML - FluentUI theme pack - see: https://www.thomasclaudiushuber.com/2025/02/21/wpf-in-net-9-0-windows-11-theming/
 - C# - WPF Project
-- System.Net.Sockets
 
 #### Required Feature
 - Scansione porte su IP/hostname specifico
