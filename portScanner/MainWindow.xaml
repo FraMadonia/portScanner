@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         Title="Port Scanner" Height="700" Width="1300"
         MinHeight="700" MinWidth="900"
-        Background="#1E1E2E" Icon="pack://application:,,,/img/logo.png">
+        Background="#1E1E2E" Icon="pack://application:,,,/img/logo.png" Loaded="Window_Loaded">
     <Window.Resources>
         <!-- Colori predefiniti -->
         <SolidColorBrush x:Key="PrimaryBg" Color="#1E1E2E"/>
