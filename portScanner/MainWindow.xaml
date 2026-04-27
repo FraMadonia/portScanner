@@ -263,6 +263,10 @@
                                 <StackPanel>
                                     <Label x:Name="LblThreadValue" Content="Thread" Style="{StaticResource FormLabel}"></Label>
                                     <Slider x:Name="SldThread" Minimum="1" Maximum="10" Value="1" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="SldThread_Change"></Slider>
+                                    <Label Content="Timeout (ms)" Style="{StaticResource FormLabel}"></Label>
+                                    <TextBox x:Name="TxtTimeout" Style="{StaticResource TextBox}"
+                                         Text="1500"
+                                         ToolTip="Inserisci dopo quanti millisecondi una porta viene considerata filtrata"/>
                                 </StackPanel>
                             </GroupBox>
                         </StackPanel>

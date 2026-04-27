@@ -1,9 +1,10 @@
 ﻿using Microsoft.Win32;
-using portScanner.Models;
+using Models.File;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using portScanner.Models.Scansione;
 
 namespace portScanner
 {
@@ -30,6 +31,8 @@ namespace portScanner
         private async void BtnStartScan_Click(object sender, RoutedEventArgs e)
         {
             // Reset UI
+            BtnStopScan.Content = "⏹ FERMA";
+            BtnStartScan.Content = "▶ AVVIA NUOVA";
             LblStatScanned.Text = "0";
             LblStatProgress.Text = "0%";
             LblStatOpen.Text = "0";
@@ -114,6 +117,9 @@ namespace portScanner
                 LblScanStatus.Text = "Scansione in corso...";
                 timer.Start();
                 dispatcherTimer.Start();
+                int prc = 1;
+                if (ChkTCP.IsChecked == true && ChkUDP.IsChecked == true)
+                    prc = 2;
 
                 if (ChkTCP.IsChecked == true)
                 {
@@ -129,7 +135,7 @@ namespace portScanner
                         {
                             token.ThrowIfCancellationRequested();
 
-                            Scansione s = new Scansione(target, p);
+                            ScanTCP s = new ScanTCP(target, p, Timeout: Convert.ToInt32(TxtTimeout.Text));
 
                             await s.ScanTCPAsync(token);
 
@@ -152,7 +158,7 @@ namespace portScanner
                                 }
                                 scansionate++;
                                 LblStatScanned.Text = scansionate.ToString();
-                                double percentuale = 100.0 * scansionate / Porte.Count;
+                                double percentuale = 100.0 * scansionate / (Porte.Count * prc);
                                 LblStatProgress.Text = Math.Round(percentuale, 2) + "%";
                                 PbarScanProgress.Value = percentuale;
                                 Scansioni.Add(s);
@@ -168,7 +174,59 @@ namespace portScanner
                     // Aspetta che tutti i task finiscano
                     await Task.WhenAll(tasks);
                 }
+                if (ChkUDP.IsChecked == true)
+                {
+                    string target = TxtTarget.Text;
+                    int maxParallel = Convert.ToInt32(SldThread.Value);
 
+                    var semaphore = new SemaphoreSlim(maxParallel);
+
+                    var tasks = Porte.Select(async p =>
+                    {
+                        await semaphore.WaitAsync(token);
+                        try
+                        {
+                            token.ThrowIfCancellationRequested();
+
+                            ScanUDP s = new ScanUDP(target, p, Timeout: Convert.ToInt32(TxtTimeout.Text));
+
+                            await s.ScanUDPAsync(token);
+
+                            await Dispatcher.InvokeAsync(() =>
+                            {
+                                switch (s.Stato)
+                                {
+                                    case StatoPorta.Aperta:
+                                        aperte++;
+                                        LblStatOpen.Text = aperte.ToString();
+                                        break;
+                                    case StatoPorta.Chiusa:
+                                        chiuse++;
+                                        LblStatClosed.Text = chiuse.ToString();
+                                        break;
+                                    case StatoPorta.Filtrata:
+                                        filtrate++;
+                                        LblStatFiltered.Text = filtrate.ToString();
+                                        break;
+                                }
+                                scansionate++;
+                                LblStatScanned.Text = scansionate.ToString();
+                                double percentuale = 100.0 * scansionate / (Porte.Count * prc);
+                                LblStatProgress.Text = Math.Round(percentuale, 2) + "%";
+                                PbarScanProgress.Value = percentuale;
+                                Scansioni.Add(s);
+                                DtgResults.Items.Add(s);
+                            });
+                        }
+                        finally
+                        {
+                            semaphore.Release();
+                        }
+                    });
+
+                    // Aspetta che tutti i task finiscano
+                    await Task.WhenAll(tasks);
+                }
                 // Scansione completata
                 timer.Stop();
                 dispatcherTimer.Stop();
@@ -178,12 +236,7 @@ namespace portScanner
             }
             catch (OperationCanceledException)
             {
-                timer.Stop();
-                dispatcherTimer.Stop();
-                BtnStopScan.IsEnabled = false;
-                BtnStartScan.IsEnabled = true;
-                LblScanStatus.Text = "Scansione annullata";
-                MessageBox.Show("Operazione cancellata");
+                BtnStopScan_Click(sender, e);
             }
             catch (Exception ex)
             {
@@ -197,26 +250,14 @@ namespace portScanner
 
         private void BtnStopScan_Click(object sender, RoutedEventArgs e)
         {
-            if (!Source.IsCancellationRequested)
-            {
-                Source.Cancel();
-                BtnStopScan.Content = "▶ RIPRENDI";
-                BtnStartScan.Content = "▶ AVVIA NUOVA";
-                timer.Stop();
-                dispatcherTimer.Stop();
-                LblScanStatus.Text = "In attesa...";
-                BtnStartScan.IsEnabled = true;
-            }
-            else
-            {
-                Source.Dispose();
-                timer.Start();
-                dispatcherTimer.Start();
-                LblScanStatus.Text = "Scansione in corso...";
-                BtnStopScan.Content = "⏹ FERMA";
-                BtnStartScan.Content = "▶ AVVIA";
-                BtnStartScan.IsEnabled = false;
-            }
+            // Scansione in corso → fermala
+            Source.Cancel();
+            BtnStopScan.Content = "▶ RIPRENDI";
+            BtnStartScan.Content = "▶ AVVIA NUOVA";
+            BtnStartScan.IsEnabled = true;
+            timer.Stop();
+            dispatcherTimer.Stop();
+            LblScanStatus.Text = "Scansione in pausa...";
         }
 
         private void SldThread_Change(object sender, RoutedEventArgs e)
@@ -229,18 +270,16 @@ namespace portScanner
         {
             try
             {
-                SaveFileDialog sfd = new SaveFileDialog();
-                sfd.Filter = "File CSV(*.csv)|*.csv";
-                if (sfd.ShowDialog() == true)
-                    using (FileStream fs = new FileStream(sfd.FileName, FileMode.OpenOrCreate, FileAccess.Write))
-                    using (StreamWriter sw = new StreamWriter(fs))
-                        foreach (Scansione line in Scansioni)
-                            sw.WriteLine(line);
+                FileCSV file = new FileCSV();
+                file.NewFile(FileMode.OpenOrCreate, FileAccess.Write);
+                foreach (Scansione line in Scansioni)
+                    file.WriteLine(line.ToString());
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Export non riuscito: " + ex.Message);
             }
         }
+
     }
 }

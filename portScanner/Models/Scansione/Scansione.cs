@@ -4,7 +4,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Windows.Media;
 
-namespace portScanner.Models
+namespace portScanner.Models.Scansione
 {
     [Flags]
     public enum Protocollo
@@ -26,6 +26,7 @@ namespace portScanner.Models
     {
         private int _porta;
         private int _latenza;
+        private int _timeout = 1500;
 
         public string Indirizzo_Hostname { get; set; }
 
@@ -49,6 +50,13 @@ namespace portScanner.Models
             get => _latenza;
             set => _latenza = value < 0
                 ? throw new Exception("Latenza negativa :/")
+                : value;
+        }
+        public int Timeout
+        {
+            get => _timeout;
+            set => _timeout = value < 0
+                ? throw new Exception("Timeout negativo :/")
                 : value;
         }
 
@@ -86,7 +94,8 @@ namespace portScanner.Models
                          string banner = "",
                          int latenza = 0,
                          string versioneServizio = "",
-                         string note = "")
+                         string note = "",
+                         int timeout = 1500)
         {
             Indirizzo_Hostname = indirizzo_Hostname;
             Porta = porta;
@@ -97,11 +106,12 @@ namespace portScanner.Models
             Latenza = latenza;
             VersioneServizio = versioneServizio;
             Note = note;
+            Timeout = timeout;
         }
 
         public override string ToString()
         {
-            return $"{Indirizzo_Hostname},{Porta},{Protocollo},{Stato},{Servizio},{VersioneServizio},{Data},{Banner},{Latenza},{Note}";
+            return $"{Indirizzo_Hostname},{Porta},{Protocollo},{Stato},{Servizio},{VersioneServizio},{Data},{Banner},{Latenza},{Timeout},{Note}";
         }
 
         public override bool Equals(object? obj)
@@ -109,7 +119,8 @@ namespace portScanner.Models
             if (obj is not Scansione other) return false;
             return Indirizzo_Hostname == other.Indirizzo_Hostname
                 && Porta == other.Porta
-                && Protocollo == other.Protocollo;
+                && Protocollo == other.Protocollo
+                && Timeout == other.Timeout;
         }
 
         public static bool operator ==(Scansione? a, Scansione? b)
@@ -122,59 +133,7 @@ namespace portScanner.Models
         public static bool operator !=(Scansione? a, Scansione? b) => !(a == b);
 
         public override int GetHashCode() =>
-            HashCode.Combine(Indirizzo_Hostname, Porta, Protocollo);
+            HashCode.Combine(Indirizzo_Hostname, Porta, Protocollo, Timeout);
 
-        public async Task ScanTCPAsync(CancellationToken externalToken = default)
-        {
-            Protocollo = Protocollo.TCP;
-            try
-            {
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(1500));
-                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-                    externalToken,
-                    timeoutCts.Token
-                );
-
-                using TcpClient tcpClient = new();
-
-                await tcpClient.ConnectAsync(Indirizzo_Hostname, Porta, linkedCts.Token);
-
-                Stato = StatoPorta.Aperta;
-                try
-                {
-                    tcpClient.ReceiveTimeout = 1000;
-                    NetworkStream stream = tcpClient.GetStream();
-                    byte[] buffer = new byte[1024];
-                    int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length,
-                        new CancellationTokenSource(1000).Token);
-                    if (bytesRead > 0)
-                        Banner = Encoding.ASCII.GetString(buffer, 0, bytesRead).Trim();
-                }
-                catch { /* banner grabbing fallito, non è un errore critico */ }
-            }
-            catch (OperationCanceledException)
-            {
-                if (externalToken.IsCancellationRequested)
-                    throw;
-
-                Stato = StatoPorta.Filtrata;
-            }
-            catch (SocketException)
-            {
-                Stato = StatoPorta.Chiusa;
-            }
-            catch (Exception)
-            {
-                Stato = StatoPorta.Unknown;
-            }
-        }
-
-        public static async Task<Scansione> ScanTCPAsync(string indirizzo, int porta,
-            CancellationToken token = default)
-        {
-            Scansione s = new(indirizzo, porta);
-            await s.ScanTCPAsync(token);
-            return s;
-        }
     }
 }
